@@ -1,0 +1,14 @@
+/**
+\mainpage
+\htmlinclude manifest.html
+
+\b usarros 
+
+<!-- 
+Provide an overview of your package.
+-->
+A ROS interface to the USARSim high-fidelity simulator.
+-->
+
+
+*/
