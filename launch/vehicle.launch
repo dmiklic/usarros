@@ -1,0 +1,7 @@
+<launch>    
+    <arg name="robot_name" default="robot_0"/>
+    <arg name="config" default="vmac2012.cfg"/>
+    <node pkg="usarros" type="diffdrive.py" name="usardiff" output="screen"
+          args="config=$(find usarros)/config/$(arg config) robot=$(arg robot_name)"
+          ns="$(arg robot_name)"/>
+</launch>
