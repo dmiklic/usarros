@@ -1,0 +1,61 @@
+Axes.Enabled=1
+Axes.Length=1
+Axes.Radius=0.1
+Axes.Reference\ Frame=<Fixed Frame>
+Background\ ColorB=0.588235
+Background\ ColorG=0.588235
+Background\ ColorR=0.588235
+Camera\ Config=8.5566 17.8083 1.12605 0
+Camera\ Type=rviz::FixedOrientationOrthoViewController
+Fixed\ Frame=/ground_truth
+Grid.Alpha=0.5
+Grid.Cell\ Size=1
+Grid.ColorB=0.5
+Grid.ColorG=0.5
+Grid.ColorR=0.5
+Grid.Enabled=1
+Grid.Line\ Style=0
+Grid.Line\ Width=0.03
+Grid.Normal\ Cell\ Count=0
+Grid.OffsetX=10
+Grid.OffsetY=10
+Grid.OffsetZ=0
+Grid.Plane=0
+Grid.Plane\ Cell\ Count=50
+Grid.Reference\ Frame=<Fixed Frame>
+Map.Alpha=0.7
+Map.Draw\ Behind=0
+Map.Enabled=1
+Map.Topic=/map
+Odometry.Angle\ Tolerance=0
+Odometry.ColorB=0
+Odometry.ColorG=0.1
+Odometry.ColorR=1
+Odometry.Enabled=1
+Odometry.Keep=0
+Odometry.Length=3
+Odometry.Position\ Tolerance=0
+Odometry.Topic=/robot_0/base_pose_ground_truth
+Property\ Grid\ Splitter=519,78
+Property\ Grid\ State=expanded=.Global Options,.Global Status,Map.Enabled,Map.Status,Odometry.Enabled,Odometry.Status;splitterratio=0.5
+QMainWindow=000000ff00000000fd00000003000000000000011d000002a7fc0200000001fb000000100044006900730070006c006100790073010000001d000002a7000000ee00ffffff0000000100000128000002a7fc0200000003fb0000001e0054006f006f006c002000500072006f0070006500720074006900650073010000001d000000ae0000006700fffffffb0000000a0056006900650077007301000000d10000013f000000bb00fffffffb0000001200530065006c0065006300740069006f006e0100000216000000ae0000006700ffffff00000003000004bf0000003efc0100000001fb0000000800540069006d00650100000000000004bf0000020900ffffff0000026e000002a700000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+Target\ Frame=<Fixed Frame>
+Tool\ 2D\ Nav\ GoalTopic=/move_base_simple/goal
+Tool\ 2D\ Pose\ EstimateTopic=initialpose
+[Display0]
+ClassName=rviz::GridDisplay
+Name=Grid
+[Display1]
+ClassName=rviz::MapDisplay
+Name=Map
+[Display2]
+ClassName=rviz::AxesDisplay
+Name=Axes
+[Display3]
+ClassName=rviz::OdometryDisplay
+Name=Odometry
+[Window]
+Height=776
+Width=1215
+X=0
+Y=0
