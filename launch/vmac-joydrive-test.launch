@@ -8,7 +8,8 @@
         <arg name="robot_name" value="robot_0"/>
     </include>
 
-    <node pkg="map_server" type="map_server" name="map_server" args="$(find vmac_interface)/maps/vmac2012.yaml"/>
+    <node pkg="map_server" type="map_server" name="map_server" args="$(find vmac_interface)/maps/vmac2012.yaml">
+        <param name="frame_id" value="/odom"/>
+    </node>
 
-    <node pkg="tf" type="static_transform_publisher" name="map_to_truth" args="0 0 0 0 0 0 map ground_truth 100"/>
 </launch>
