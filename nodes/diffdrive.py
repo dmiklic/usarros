@@ -6,9 +6,7 @@ import rospy
 import tf
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseStamped, PointStamped 
-from geometry_msgs.msg import Twist
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import *
 
 # Custom ROS imports
 from usar_config_parser import usar_config_parser
@@ -80,6 +78,11 @@ class diffdrive:
         self.odom.header.stamp = rospy.Time.now()
         self.odom.header.frame_id = tf_prefix + 'odom'
         self.odom.child_frame_id = tf_prefix + 'base_link'
+
+        # Initialize sensors
+        self.laser_tf = TransformStamped()
+        self.laser_tf.header.frame_id = 'base_link'
+        self.laser_tf.child_frame_id = 'base_laser'
 
         # Store the tf_prefix
         self.tf_prefix = tf_prefix
@@ -162,9 +165,15 @@ class diffdrive:
 
 #------------------------------------------------------------------------------
                 
-    def handle_scanner_geo(self, args):
+    def handle_scanner_geo(self, args):        
         for (name,par) in args.items():
-            print(name, par)
+            if name == 'Orientation':
+                rot = [float(s) for s in par.split(',')]
+            elif name == 'Location':
+                loc = [float(s) for s in par.split(',')]
+        
+        self.laser_tf.transform.translation = Vector3(loc[1],loc[0],-loc[2]) # USARSim coordinates are weird %)
+        self.laser_tf.transform.rotation = Quaternion(*tf.transformations.quaternion_from_euler(*rot))
 
 #------------------------------------------------------------------------------
 
@@ -196,7 +205,7 @@ class diffdrive:
                     lin_vel = (w_left + w_right) * self.r / 2.0
                     rot_vel = self.r * (w_right - w_left) / self.l
             self.odom.twist.twist.linear.x = lin_vel        
-            self.odom.twist.twist.angular.z = rot_vel
+            self.odom.twist.twist.angular.z = -rot_vel
             self.odom.header.stamp = time_now
             # Publish the odom message
             self.odom_pub.publish(self.odom)
@@ -205,9 +214,19 @@ class diffdrive:
 #------------------------------------------------------------------------------
 
     def handle_scanner_msg(self, args):
+        # Broadcast scanner transform first
+        time_now = rospy.Time.now()        
+        pos = self.laser_tf.transform.translation
+        rot = self.laser_tf.transform.rotation        
+        self.tf_broadcaster.sendTransform((pos.x, pos.y, pos.z),
+                                      (rot.x, rot.y, rot.z, rot.w),
+                                      time_now,
+                                      self.laser_tf.child_frame_id,
+                                      self.laser_tf.header.frame_id)
+                                    
         for (name, par) in args.items():
-            pass            
-            #print(name)
+            if name == 'Range':
+                ranges = [float(s) for s in par.split(',')]
 
 #------------------------------------------------------------------------------
 
