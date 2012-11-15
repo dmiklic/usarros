@@ -105,17 +105,9 @@ class diffdrive:
         self.tf_listener.waitForTransform('usarsim', 'odom', rospy.Time(), rospy.Duration(60))
         
         # Transform ROS (odom) pose to USARSim
-        pose_truth = PoseStamped()        
-        pose_truth.header.frame_id = self.ground_truth.header.frame_id        
-        pose_truth.pose.position = self.ground_truth.pose.pose.position
-        pose_truth.pose.orientation = self.ground_truth.pose.pose.orientation
-        pose_truth.header.stamp = rospy.Time()        
-        pose_usar = self.tf_listener.transformPose('usarsim', pose_truth)
+        pose_usar = self.tf_odom_msg_pose('usarsim', self.ground_truth)
         q = pose_usar.pose.orientation        
-        rot_usar = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])        
-        print(pose_truth)
-        print(self.tf_listener.lookupTransform('odom','usarsim',rospy.Time()))       
-        print(pose_usar)        
+        rot_usar = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])               
         
         # Spawn spawn the robot     
         msg = ('INIT {{ClassName USARBot.{0}}} '.format(vehtype)
@@ -186,10 +178,30 @@ class diffdrive:
 #------------------------------------------------------------------------------
 
     def handle_tacho_msg(self, args):
-        for (name, par) in args.items():
-            pass
-            #print(name)
-
+        if self.r and self.l:
+            time_now = rospy.Time.now()
+            # Broadcast the odom transform first
+            odom_pos = self.odom.pose.pose.position
+            odom_rot = self.odom.pose.pose.orientation
+            self.tf_broadcaster.sendTransform((odom_pos.x, odom_pos.y, odom_pos.z),
+                                          (odom_rot.x, odom_rot.y, odom_rot.z, odom_rot.w),
+                                          time_now,
+                                          'base_link',
+                                          'odom')            
+            for (name, par) in args.items():
+                par = par.split(',')            
+                if name == 'Vel':
+                    w_left = float(par[0])
+                    w_right = float(par[1])
+                    lin_vel = (w_left + w_right) * self.r / 2.0
+                    rot_vel = self.r * (w_right - w_left) / self.l
+            self.odom.twist.twist.linear.x = lin_vel        
+            self.odom.twist.twist.angular.z = rot_vel
+            self.odom.header.stamp = time_now
+            # Publish the odom message
+            self.odom_pub.publish(self.odom)
+        else:
+            rospy.logwarn("Can't compute velocity, robot parameters unknown!")    
 #------------------------------------------------------------------------------
 
     def handle_scanner_msg(self, args):
@@ -202,21 +214,25 @@ class diffdrive:
     def handle_odometry_msg(self, args):
         for (name, par) in args.items():
             if name == 'Pose':
+                # Unpack data sent by usarsim                
+                time_now = rospy.Time.now()                    
                 xyyaw = [float(s) for s in par.split(',')]
                 self.odom.pose.pose.position.x = xyyaw[0]
                 self.odom.pose.pose.position.y = xyyaw[1]
-#                q = tf.transformations.quaternion_from_euler(vehpar['roll'],
-#                                                       vehpar['pitch'],
-#                                                       vehpar['yaw'])
-#                self.odom.pose.pose.orientation.x = q[0]
-#                self.odom.pose.pose.orientation.y = q[1]
-#                self.odom.pose.pose.orientation.z = q[2]
-#                self.odom.pose.pose.orientation.w = q[3]                
-
-#------------------------------------------------------------------------------
-
-    def publish_odom_tf(self, args):
-        pass
+                q = tf.transformations.quaternion_from_euler(0.0, 0.0, xyyaw[2])
+                self.odom.pose.pose.orientation.x = q[0]
+                self.odom.pose.pose.orientation.y = q[1]
+                self.odom.pose.pose.orientation.z = q[2]
+                self.odom.pose.pose.orientation.w = q[3]
+                self.odom.header.frame_id = 'usarsim'
+                # Transform to ROS (odom) cordinates
+                odom_pose = self.tf_odom_msg_pose('odom', self.odom)                
+                self.odom.header = odom_pose.header
+                self.odom.header.stamp = time_now
+                self.odom.pose.pose = odom_pose.pose
+                
+                # We will not publish the message
+                # We will let handle_tacho_msg publish the whole odom message
 
 #------------------------------------------------------------------------------
 
@@ -238,6 +254,13 @@ class diffdrive:
             elif name == 'Orientation':
                 self.set_rot(self.ground_truth.pose.pose.orientation, par)
         
+        # Transform from USARSim to ROS (odom) coordinates                
+        self.ground_truth.header.frame_id = 'usarsim'        
+        truth_pose = self.tf_odom_msg_pose('odom', self.ground_truth)                
+        self.ground_truth.header = truth_pose.header
+        self.ground_truth.header.stamp = time_now
+        self.ground_truth.pose.pose = truth_pose.pose
+
         # The USARSim GroundTruth sensor is not publishing velocities
         # so we'll compute them by hand
         pos_new = self.ground_truth.pose.pose.position
@@ -246,28 +269,43 @@ class diffdrive:
         q = self.ground_truth.pose.pose.orientation
         yaw_new = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])[2]        
         self.ground_truth.twist.twist.angular.z = myunwrap(yaw_new - yaw_old) / dt        
-
+        
         # Publish the ground truth message.        
         self.truth_pub.publish(self.ground_truth)
 
 #------------------------------------------------------------------------------
 
+    def tf_odom_msg_pose(self, target_frame, odom_msg, ts=rospy.Time()):
+        """ Utility function for transforming the pose part of an Odometry message. 
+            It assumes static frames (twist is not transformed!)
+        """
+        pose = PoseStamped()        
+        pose.header.frame_id = odom_msg.header.frame_id        
+        pose.pose.position = odom_msg.pose.pose.position
+        pose.pose.orientation = odom_msg.pose.pose.orientation
+        pose.header.stamp = ts        
+        
+        return self.tf_listener.transformPose(target_frame, pose)        
+
+#------------------------------------------------------------------------------
+
     def set_pos(self, position_msg, pos):
-        """ Sets position data in an position message """
+        """ Sets position data in a position message """
         pos = [float(s) for s in pos.split(',')]        
         position_msg.x = pos[0]
-        position_msg.y = -pos[1]    # Account for different coordinate system in USARSim
+        position_msg.y = pos[1]    # Account for different coordinate system in USARSim
         position_msg.z = pos[2]
 
 #------------------------------------------------------------------------------
     
     def set_rot(self, orientation_msg, rot):
-        """ Sets position data in an position message """
-        rot = [float(s) for s in rot.split(',')]        
+        """ Sets orientation data in a quaternion """
+        rot = [float(s) for s in rot.split(',')]   
+        # quaternion_from_euler expects roll,pitch,yaw??? BUG?     
         rot_quat = tf.transformations.quaternion_from_euler(rot[0], rot[1], rot[2])        
         orientation_msg.x = rot_quat[0]
         orientation_msg.y = rot_quat[1]
-        orientation_msg.z = -rot_quat[2]    # Account for different coordinate system in USARSim
+        orientation_msg.z = rot_quat[2]    # Account for different coordinate system in USARSim
         orientation_msg.w = rot_quat[3]
 
 #------------------------------------------------------------------------------
@@ -292,9 +330,6 @@ class diffdrive:
             self.client.queue_msg(usar_msg)
         else:
             rospy.logwarn("Can't issue DRIVE command, robot parameters unknown!")
-
-#------------------------------------------------------------------------------
-
 
 
 #------------------------------------------------------------------------------
