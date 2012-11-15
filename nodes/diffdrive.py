@@ -68,9 +68,9 @@ class diffdrive:
         self.ground_truth.pose.pose.position.x = vehpar['x']
         self.ground_truth.pose.pose.position.y = vehpar['y']
         self.ground_truth.pose.pose.position.z = vehpar['z']        
-        rot_quat = tf.transformations.quaternion_from_euler(vehpar['roll'],
+        rot_quat = tf.transformations.quaternion_from_euler(vehpar['yaw'],
                                                        vehpar['pitch'],
-                                                       vehpar['yaw'])
+                                                       vehpar['roll'])
         self.ground_truth.pose.pose.orientation.x = rot_quat[0]
         self.ground_truth.pose.pose.orientation.y = rot_quat[1]
         self.ground_truth.pose.pose.orientation.z = rot_quat[2]
@@ -89,6 +89,7 @@ class diffdrive:
         self.odom_pub = rospy.Publisher('odom', Odometry)
         self.truth_pub = rospy.Publisher('base_pose_ground_truth', Odometry)
         self.tf_broadcaster = tf.TransformBroadcaster()
+        self.tf_listener = tf.TransformListener()
         self.vel_sub = rospy.Subscriber('cmd_vel', Twist, self.cmd_vel_callback)
         
         # Connect to USARSim       
@@ -100,17 +101,29 @@ class diffdrive:
 
     def create_init_msg(self, vehtype, name):
         """ Create USARSim command to spawn the robot and get configuration information. """
-        # TODO: Figure out how to properly transform ROS coordinates 
-        # to USARSim coordinates!
-        # Until then, just flip the signs on y and yaw        
-        pos = self.ground_truth.pose.pose.position
-        q = self.ground_truth.pose.pose.orientation
-        rot = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
+               
+        self.tf_listener.waitForTransform('usarsim', 'odom', rospy.Time(), rospy.Duration(60))
+        
+        # Transform ROS (odom) pose to USARSim
+        pose_truth = PoseStamped()        
+        pose_truth.header.frame_id = self.ground_truth.header.frame_id        
+        pose_truth.pose.position = self.ground_truth.pose.pose.position
+        pose_truth.pose.orientation = self.ground_truth.pose.pose.orientation
+        pose_truth.header.stamp = rospy.Time()        
+        pose_usar = self.tf_listener.transformPose('usarsim', pose_truth)
+        q = pose_usar.pose.orientation        
+        rot_usar = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])        
+        print(pose_truth)
+        print(self.tf_listener.lookupTransform('odom','usarsim',rospy.Time()))       
+        print(pose_usar)        
+        
         # Spawn spawn the robot     
         msg = ('INIT {{ClassName USARBot.{0}}} '.format(vehtype)
             + '{{Name {0}}} '.format(name) 
-            + '{{Location {0},{1},{2}}} '.format(pos.x, -pos.y, pos.z)
-            + '{{Rotation {0},{1},{2}}}\r\n'.format(rot[0], rot[1], -rot[2]))
+            + '{{Location {0},{1},{2}}} '.format(pose_usar.pose.position.x, 
+                                                pose_usar.pose.position.y, 
+                                                pose_usar.pose.position.z)
+            + '{{Rotation {0},{1},{2}}}\r\n'.format(rot_usar[2], rot_usar[1], rot_usar[0]))
 
         # Query vehicle configuration
         msg += 'GETGEO {Type Robot}\r\n'        
@@ -192,18 +205,18 @@ class diffdrive:
                 xyyaw = [float(s) for s in par.split(',')]
                 self.odom.pose.pose.position.x = xyyaw[0]
                 self.odom.pose.pose.position.y = xyyaw[1]
-                q = tf.transformations.quaternion_from_euler(vehpar['roll'],
-                                                       vehpar['pitch'],
-                                                       vehpar['yaw'])
-                self.odom.pose.pose.orientation.x = q[0]
-                self.odom.pose.pose.orientation.y = q[1]
-                self.odom.pose.pose.orientation.z = q[2]
-                self.odom.pose.pose.orientation.w = q[3]                
+#                q = tf.transformations.quaternion_from_euler(vehpar['roll'],
+#                                                       vehpar['pitch'],
+#                                                       vehpar['yaw'])
+#                self.odom.pose.pose.orientation.x = q[0]
+#                self.odom.pose.pose.orientation.y = q[1]
+#                self.odom.pose.pose.orientation.z = q[2]
+#                self.odom.pose.pose.orientation.w = q[3]                
 
 #------------------------------------------------------------------------------
 
     def publish_odom_tf(self, args):
-
+        pass
 
 #------------------------------------------------------------------------------
 
@@ -279,6 +292,10 @@ class diffdrive:
             self.client.queue_msg(usar_msg)
         else:
             rospy.logwarn("Can't issue DRIVE command, robot parameters unknown!")
+
+#------------------------------------------------------------------------------
+
+
 
 #------------------------------------------------------------------------------
 

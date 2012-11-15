@@ -4,4 +4,6 @@
     <node pkg="usarros" type="diffdrive.py" name="usardiff" output="screen"
           args="config=$(find usarros)/config/$(arg config) robot=$(arg robot_name)"
           ns="$(arg robot_name)"/>
+
+    <node pkg="tf" type="static_transform_publisher" name="ros_to_usar" args="0 0 0 0 0 3.14159265359 odom usarsim 100" ns="$(arg robot_name)"/>
 </launch>
