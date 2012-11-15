@@ -6,7 +6,7 @@ import rospy
 import tf
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
-#from geometry_msgs.msg import PoseWithCovarianceStamped 
+from geometry_msgs.msg import PoseStamped, PointStamped 
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import TransformStamped
 
@@ -16,10 +16,12 @@ from usar_config_parser import usar_config_parser
 # Imports from this package
 from usar_client import usar_client
 
+# Third-party library imports
+from numpy import array, sqrt, unwrap, pi
+
 # Standard library imports
 import sys 
 import asyncore
-from math import pi
 
 #==============================================================================
 
@@ -42,7 +44,8 @@ class diffdrive:
         # Assign message handlers to USARSim message types        
         self.sen_msg_handlers = {'Tachometer': self.handle_tacho_msg,
                               'RangeScanner': self.handle_scanner_msg,
-                              'GroundTruth': self.handle_truth_msg} 
+                              'GroundTruth': self.handle_truth_msg,
+                              'Odometry': self.handle_odometry_msg} 
         self.geo_msg_handlers = {'GroundVehicle': self.handle_veh_geo,
                               'RangeScanner': self.handle_scanner_geo}        
 
@@ -60,8 +63,8 @@ class diffdrive:
         # Initialize robot positions/velocities
         self.ground_truth = Odometry()
         self.ground_truth.header.stamp = rospy.Time.now()
-        self.ground_truth.header.frame_id = tf_prefix + '/odom'
-        self.ground_truth.child_frame_id = tf_prefix + '/base_link'
+        self.ground_truth.header.frame_id = tf_prefix + 'odom'
+        self.ground_truth.child_frame_id = tf_prefix + 'base_link'
         self.ground_truth.pose.pose.position.x = vehpar['x']
         self.ground_truth.pose.pose.position.y = vehpar['y']
         self.ground_truth.pose.pose.position.z = vehpar['z']        
@@ -72,30 +75,14 @@ class diffdrive:
         self.ground_truth.pose.pose.orientation.y = rot_quat[1]
         self.ground_truth.pose.pose.orientation.z = rot_quat[2]
         self.ground_truth.pose.pose.orientation.w = rot_quat[3]
-                
+       
         self.odom = Odometry()
         self.odom.header.stamp = rospy.Time.now()
-        self.odom.header.frame_id = tf_prefix + '/odom'
-        self.odom.child_frame_id = tf_prefix + '/base_link'
+        self.odom.header.frame_id = tf_prefix + 'odom'
+        self.odom.child_frame_id = tf_prefix + 'base_link'
 
-        # Odometry transform
-        self.odom_tf = TransformStamped()
-        self.odom_tf.header.frame_id = tf_prefix + '/odom'
-        self.odom_tf.child_frame_id = tf_prefix + '/base_link'
-        
-        # Transform between USARSim coordinates and ROS coordinates
-        self.usarsim_tf = TransformStamped()
-        self.usarsim_tf.header.frame_id = tf_prefix + '/usarsim'
-        self.usarsim_tf.child_frame_id = tf_prefix + '/odom'
-        rot_usar = tf.transformations.quaternion_from_euler(pi, 0.0, 0.0)
-        self.usarsim_tf.transform.rotation = rot_usar
-
-        # Attached devices
-        # TODO: Fix this (and other stuff) to support multiple devices
-        # Devices should probably become objects        
-        self.laser_tf = TransformStamped()
-        self.laser_tf.header.frame_id = tf_prefix + '/base_link'
-        self.laser_tf.child_frame_id = tf_prefix + '/laser_link'
+        # Store the tf_prefix
+        self.tf_prefix = tf_prefix
 
         # Create publishers and subscribers
         self.scan_pub = rospy.Publisher('scan', LaserScan)
@@ -113,16 +100,17 @@ class diffdrive:
 
     def create_init_msg(self, vehtype, name):
         """ Create USARSim command to spawn the robot and get configuration information. """
-        # TODO: Transform ROS map coordinates to USARSim coordinates        
-        
+        # TODO: Figure out how to properly transform ROS coordinates 
+        # to USARSim coordinates!
+        # Until then, just flip the signs on y and yaw        
         pos = self.ground_truth.pose.pose.position
         q = self.ground_truth.pose.pose.orientation
         rot = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
         # Spawn spawn the robot     
         msg = ('INIT {{ClassName USARBot.{0}}} '.format(vehtype)
             + '{{Name {0}}} '.format(name) 
-            + '{{Location {0},{1},{2}}} '.format(pos.x, pos.y, pos.z)
-            + '{{Rotation {0},{1},{2}}}\r\n'.format(rot[0], rot[1], rot[2]))
+            + '{{Location {0},{1},{2}}} '.format(pos.x, -pos.y, pos.z)
+            + '{{Rotation {0},{1},{2}}}\r\n'.format(rot[0], rot[1], -rot[2]))
 
         # Query vehicle configuration
         msg += 'GETGEO {Type Robot}\r\n'        
@@ -198,19 +186,54 @@ class diffdrive:
 
 #------------------------------------------------------------------------------
 
+    def handle_odometry_msg(self, args):
+        for (name, par) in args.items():
+            if name == 'Pose':
+                xyyaw = [float(s) for s in par.split(',')]
+                self.odom.pose.pose.position.x = xyyaw[0]
+                self.odom.pose.pose.position.y = xyyaw[1]
+                q = tf.transformations.quaternion_from_euler(vehpar['roll'],
+                                                       vehpar['pitch'],
+                                                       vehpar['yaw'])
+                self.odom.pose.pose.orientation.x = q[0]
+                self.odom.pose.pose.orientation.y = q[1]
+                self.odom.pose.pose.orientation.z = q[2]
+                self.odom.pose.pose.orientation.w = q[3]                
+
+#------------------------------------------------------------------------------
+
+    def publish_odom_tf(self, args):
+
+
+#------------------------------------------------------------------------------
+
     def handle_truth_msg(self, args):
         """ Read ground truth info and publish it """                      
         time_now = rospy.Time.now()        
-        pos_old = self.ground_truth.pose.pose.position
-        rot_old = self.ground_truth.pose.pose.orientation        
+        dt = (time_now - self.ground_truth.header.stamp).to_sec()
+        self.ground_truth.header.stamp = time_now
+        
+        # Store old positions for speed calculations        
+        x_old = self.ground_truth.pose.pose.position.x
+        y_old = self.ground_truth.pose.pose.position.y
+        q = self.ground_truth.pose.pose.orientation
+        yaw_old = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])[2]        
+
         for (name, par) in args.items():            
             if name == 'Location':
                 self.set_pos(self.ground_truth.pose.pose.position, par)                
             elif name == 'Orientation':
                 self.set_rot(self.ground_truth.pose.pose.orientation, par)
-            # TODO: Add velocity publishing to USARSim GroundTruth sensor
-            # Until then, we'll just compute the velocities by hand
-            
+        
+        # The USARSim GroundTruth sensor is not publishing velocities
+        # so we'll compute them by hand
+        pos_new = self.ground_truth.pose.pose.position
+        lin_vel = sqrt((pos_new.x-x_old)**2+(pos_new.y-y_old)**2) / dt    
+        self.ground_truth.twist.twist.linear.x = lin_vel
+        q = self.ground_truth.pose.pose.orientation
+        yaw_new = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])[2]        
+        self.ground_truth.twist.twist.angular.z = myunwrap(yaw_new - yaw_old) / dt        
+
         # Publish the ground truth message.        
         self.truth_pub.publish(self.ground_truth)
 
@@ -220,7 +243,7 @@ class diffdrive:
         """ Sets position data in an position message """
         pos = [float(s) for s in pos.split(',')]        
         position_msg.x = pos[0]
-        position_msg.y = pos[1]
+        position_msg.y = -pos[1]    # Account for different coordinate system in USARSim
         position_msg.z = pos[2]
 
 #------------------------------------------------------------------------------
@@ -231,7 +254,7 @@ class diffdrive:
         rot_quat = tf.transformations.quaternion_from_euler(rot[0], rot[1], rot[2])        
         orientation_msg.x = rot_quat[0]
         orientation_msg.y = rot_quat[1]
-        orientation_msg.z = rot_quat[2]
+        orientation_msg.z = -rot_quat[2]    # Account for different coordinate system in USARSim
         orientation_msg.w = rot_quat[3]
 
 #------------------------------------------------------------------------------
@@ -259,46 +282,16 @@ class diffdrive:
 
 #------------------------------------------------------------------------------
 
-    def publish_odom(self, pos, rot, linvel, rotvel, pub):
-        """ Assemble an odom message from position, orientation 
-            and velocity data, publish it to the provided channel
-        """
-
-        # Publish the odometry message.        
-        odom = Odometry()
-        odom.header.stamp = rospy.Time.now()         
-        odom.header.frame_id = self.tf_prefix + '/odom'
-        odom.child_frame_id = self.tf_prefix + '/base_link'        
-        
-        # Position        
-        odom.pose.pose.position.x = self.pos_gt[0]
-        odom.pose.pose.position.y = self.pos_gt[1]
-        odom.pose.pose.position.z = self.pos_gt[2]       
-        
-        # Orientation
-        rot_quat = tf.transformations.quaternion_from_euler(self.rot_gt[0],
-                                                       self.rot_gt[1],
-                                                       self.rot_gt[2])        
-        odom.pose.pose.orientation.x = rot_quat[0]
-        odom.pose.pose.orientation.y = rot_quat[1]
-        odom.pose.pose.orientation.z = rot_quat[2]
-        odom.pose.pose.orientation.w = rot_quat[3]  
-        
-        # Velocity
-        odom.twist.twist.linear.x = self.linvel_gt[0]
-        odom.twist.twist.linear.y = self.linvel_gt[1]
-        odom.twist.twist.linear.z = self.linvel_gt[2]
-        odom.twist.twist.angular.x = self.rotvel_gt[0]
-        odom.twist.twist.angular.y = self.rotvel_gt[1]
-        odom.twist.twist.angular.z = self.rotvel_gt[2]
-       
-        pub.publish(odom)
-
-#------------------------------------------------------------------------------
-
     def run(self):
         """ Keep communicating with usarsim """
         asyncore.loop()
+
+#==============================================================================
+
+def myunwrap(angle):
+    arr = array([0.0, angle])
+    arr = unwrap(arr)
+    return arr[1]
 
 #==============================================================================
 
