@@ -9,7 +9,9 @@
     </include>
 
     <node pkg="map_server" type="map_server" name="map_server" args="$(find vmac_interface)/maps/vmac2012.yaml">
-        <param name="frame_id" value="/odom"/>
+        <param name="frame_id" value="/map"/>
     </node>
+
+    <node pkg="tf" type="static_transform_publisher" name="naive_localization" args="0 0 0 0 0 0 map odom 100"/>
 
 </launch>
