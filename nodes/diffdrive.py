@@ -57,7 +57,7 @@ class diffdrive:
         rospy.init_node('usardiff')
         
         # Initialize parameters from ROS parameter server
-        tf_prefix = ''
+        tf_prefix = rospy.get_param('~tf_prefix', '')
         if tf_prefix:
             tf_prefix = '/' + tf_prefix + '/'
         else:
@@ -113,10 +113,13 @@ class diffdrive:
     def create_init_msg(self, vehtype, name):
         """ Create USARSim command to spawn the robot and get configuration information. """
                
-        self.tf_listener.waitForTransform('usarsim', 'odom', rospy.Time(), rospy.Duration(60))
+        self.tf_listener.waitForTransform(self.usarsim_frame, 
+                                      self.odom_frame, 
+                                      rospy.Time(), 
+                                      rospy.Duration(60))
         
         # Transform ROS (odom) pose to USARSim
-        pose_usar = self.trans_odom_msg_pose('usarsim', self.ground_truth)
+        pose_usar = self.trans_odom_msg_pose(self.usarsim_frame, self.ground_truth)
         q = pose_usar.pose.orientation        
         rot_usar = euler_from_quaternion([q.x, q.y, q.z, q.w])               
         
@@ -177,7 +180,8 @@ class diffdrive:
                 
     def handle_scanner_geo(self, args):        
         # TODO: Laser location and orientation should actually also be
-        # properly transformed!       
+        # properly transformed!
+        # Code below will likely fail for a laser that's not looking straight ahead       
         for (name,par) in args.items():
             if name == 'Orientation':
                 rot = [float(s) for s in par.split(',')]
@@ -265,7 +269,7 @@ class diffdrive:
                 # (supposedly %)                
                 q = tf.transformations.quaternion_from_euler(pi, 0.0, xyyaw[2])
                 self.odom.pose.pose.orientation = Quaternion(*q)
-                self.odom.header.frame_id = 'usarsim'
+                self.odom.header.frame_id = self.usarsim_frame
                 # Transform to ROS (odom) cordinates
                 odom_pose = self.trans_odom_msg_pose(self.odom_frame, self.odom)                
                 odom_pose.pose.position.z = 0.0 # Odometry doesn't fly :)
@@ -290,7 +294,7 @@ class diffdrive:
         x_old = self.ground_truth.pose.pose.position.x
         y_old = self.ground_truth.pose.pose.position.y
         q = self.ground_truth.pose.pose.orientation
-        yaw_old = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])[2]        
+        yaw_old = euler_from_quaternion([q.x, q.y, q.z, q.w])[2]        
 
         for (name, par) in args.items():            
             if name == 'Location':
@@ -303,8 +307,8 @@ class diffdrive:
                 self.ground_truth.pose.pose.orientation = Quaternion(*q)
         
         # Transform from USARSim to ROS (odom) coordinates                
-        self.ground_truth.header.frame_id = 'usarsim'        
-        truth_pose = self.trans_odom_msg_pose('odom', self.ground_truth)                
+        self.ground_truth.header.frame_id = self.usarsim_frame        
+        truth_pose = self.trans_odom_msg_pose(self.odom_frame, self.ground_truth)                
         self.ground_truth.header = truth_pose.header
         self.ground_truth.header.stamp = time_now
         self.ground_truth.pose.pose = truth_pose.pose

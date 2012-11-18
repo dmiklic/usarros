@@ -1,7 +1,8 @@
 <launch>
-    <include file="$(find usarros)/launch/vehicle.launch">
+    <arg name="robot_name" default="robot_0"/>
+    <include file="$(find usarros)/launch/diffdrive.launch">
         <arg name="robot_name" value="robot_0"/>
-        <arg name="config" value="vmac2012.cfg"/>
+        <arg name="config" value="kiva_1x.cfg"/>
     </include>
 
     <include file="$(find usarros)/launch/teleop-joy.launch">
@@ -9,9 +10,11 @@
     </include>
 
     <node pkg="map_server" type="map_server" name="map_server" args="$(find vmac_interface)/maps/vmac2012.yaml">
-        <param name="frame_id" value="/map"/>
+        <param name="frame_id" value="/$(arg robot_name)/map"/>
     </node>
 
-    <node pkg="tf" type="static_transform_publisher" name="naive_localization" args="0 0 0 0 0 0 map odom 100"/>
+    <node pkg="tf" type="static_transform_publisher" name="naive_localization" args="0 0 0 0 0 0 map odom 100">
+        <param name="tf_prefix" value="$(arg robot_name)"/>
+    </node>
 
 </launch>

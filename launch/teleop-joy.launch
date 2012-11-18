@@ -1,6 +1,6 @@
 <launch>
 	<arg name="controller" default="logitech" />
-    <arg name="robot_name" default="pioneer" />
+    <arg name="robot_name" default="robot_0" />
 	<!-- run the teleop node to send movement velocities to the pioneer -->
 	
 	<rosparam param="/p2os_teleop" command="load" file="$(find p2os_launch)/params/joystick_$(arg controller).yaml" />
