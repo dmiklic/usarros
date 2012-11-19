@@ -1,0 +1,23 @@
+<launch>
+    <arg name="robot_name" default="robot_0"/>    
+    <arg name="config" default="kiva_1x.cfg"/>    
+    <arg name="map_file" default="vmac2012.yaml"/>
+
+    <include file="$(find usarros)/launch/diffdrive.launch"> 
+		<arg name="robot_name" value="$(arg robot_name)"/>
+        <arg name="config" value="$(arg config)"/>
+    </include>
+
+    <group ns="$(arg robot_name)">
+        <node pkg="map_server" type="map_server" name="map_server" args="$(find usarros)/maps/$(arg map_file)">
+            <param name="frame_id" value="/$(arg robot_name)/map"/>
+        </node>        
+        <node name="amcl" pkg="amcl" type="amcl">
+            <param name="odom_frame_id" value="/$(arg robot_name)/odom"/>
+            <param name="base_frame_id" value="/$(arg robot_name)/base_link"/>
+            <param name="global_frame_id" value="/$(arg robot_name)/map"/>
+            <remap from="odom" to="/$(arg robot_name)/odom"/>
+            <remap from="scan" to="/$(arg robot_name)/scan"/>
+        </node>
+    </group>    
+</launch>

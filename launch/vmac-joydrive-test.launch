@@ -9,7 +9,7 @@
         <arg name="robot_name" value="robot_0"/>
     </include>
 
-    <node pkg="map_server" type="map_server" name="map_server" args="$(find vmac_interface)/maps/vmac2012.yaml">
+    <node pkg="map_server" type="map_server" name="map_server" args="$(find usarros)/maps/vmac2012.yaml">
         <param name="frame_id" value="/$(arg robot_name)/map"/>
     </node>
 

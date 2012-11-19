@@ -1,8 +1,9 @@
 <launch>    
     <arg name="robot_name" default="robot_0"/>
     <arg name="config" default="kiva_1x.cfg"/>
+    <arg name="localization" default="odom"/>
     <node pkg="usarros" type="diffdrive.py" name="usardiff" output="screen"
-          args="config=$(find usarros)/config/$(arg config) robot=$(arg robot_name)"
+          args="config=$(find usarros)/config/$(arg config) robot=$(arg robot_name) localization=$(arg localization)"
           ns="$(arg robot_name)">
         <param name="tf_prefix" value="$(arg robot_name)"/>
     </node>

@@ -1,0 +1,6 @@
+image: vmac2012.png
+resolution: 0.099340
+origin: [-14.30496, -4.37096, 0.00000]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.196

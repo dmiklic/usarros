@@ -1,0 +1,23 @@
+<launch>
+    <!-- We'll publish a static transform between map and odom to fake localization -->
+    <!-- Ground truth is published on the base_pose_ground_truth topic -->
+    <arg name="robot_name" default="robot_0"/>    
+    <arg name="config" default="kiva_1x.cfg"/>    
+    <arg name="map_file" default="$(find usarros)/maps/vmac2012.yaml"/>
+
+    <include file="$(find usarros)/launch/diffdrive.launch"> 
+		<arg name="robot_name" value="$(arg robot_name)"/>
+        <arg name="config" value="$(arg config)"/>
+        <arg name="localization" value="fake"/>
+    </include>
+
+    <group ns="$(arg robot_name)">
+        <node pkg="map_server" type="map_server" name="map_server" args="$(arg map_file)">
+            <param name="frame_id" value="/$(arg robot_name)/map"/>
+        </node>
+
+        <node pkg="tf" type="static_transform_publisher" name="fake_localization" args="0 0 0 0 0 0 map odom 100">
+            <param name="tf_prefix" value="$(arg robot_name)"/>
+        </node>
+    </group>    
+</launch>

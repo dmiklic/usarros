@@ -27,7 +27,7 @@ from usar_client import usar_client
 class diffdrive:
     """ A differential drive robot, simulated in USARSim"""
 
-    def __init__(self, config_file, name):
+    def __init__(self, config_file, name, localization='odom'):
         """
             Parameters:
             -----------
@@ -40,6 +40,10 @@ class diffdrive:
         vehpar = cfg.parsed_items('vehicles')[name]
         usarpar = cfg.section_items('usarsim')
         
+        self.fake_localization = False
+        if localization == 'fake':
+            self.fake_localization = True
+
         # Assign message handlers to USARSim message types        
         self.sen_msg_handlers = {'Tachometer': self.handle_tacho_msg,
                               'RangeScanner': self.handle_scanner_msg,
@@ -204,14 +208,15 @@ class diffdrive:
     def handle_tacho_msg(self, args):
         if self.r and self.l:
             time_now = rospy.Time.now()
-            # Broadcast the odom transform first
-            odom_pos = self.odom.pose.pose.position
-            odom_rot = self.odom.pose.pose.orientation
-            self.tf_broadcaster.sendTransform((odom_pos.x, odom_pos.y, odom_pos.z),
-                                          (odom_rot.x, odom_rot.y, odom_rot.z, odom_rot.w),
-                                          time_now,
-                                          self.base_link_frame,
-                                          self.odom_frame)            
+            # Broadcast the odom transform first (unless we're faking localization) 
+            if not self.fake_localization:            
+                odom_pos = self.odom.pose.pose.position
+                odom_rot = self.odom.pose.pose.orientation
+                self.tf_broadcaster.sendTransform((odom_pos.x, odom_pos.y, odom_pos.z),
+                                              (odom_rot.x, odom_rot.y, odom_rot.z, odom_rot.w),
+                                              time_now,
+                                              self.base_link_frame,
+                                              self.odom_frame)            
             for (name, par) in args.items():
                 par = par.split(',')            
                 if name == 'Vel':
@@ -322,6 +327,16 @@ class diffdrive:
         yaw_new = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])[2]        
         self.ground_truth.twist.twist.angular.z = myunwrap(yaw_new - yaw_old) / dt        
         
+        # If we're also faking localization, publish the odom->base_link transform
+        if self.fake_localization:            
+            truth_pos = self.ground_truth.pose.pose.position
+            truth_rot = self.ground_truth.pose.pose.orientation
+            self.tf_broadcaster.sendTransform((truth_pos.x, truth_pos.y, truth_pos.z),
+                                          (truth_rot.x, truth_rot.y, truth_rot.z, truth_rot.w),
+                                          time_now,
+                                          self.base_link_frame,
+                                          self.odom_frame)
+
         # Publish the ground truth message.        
         self.truth_pub.publish(self.ground_truth)
 
@@ -378,13 +393,14 @@ def myunwrap(angle):
 
 #==============================================================================
 
+# TODO: Implement with argparse!
 def parse_arguments(argv):
     """ Parse the command line arguments.
         Returns a dictionary where argument names are keys,
         and argumens are values.
     """     
     usage = ('Usage: rosrun usarros diffdrive.py ' + 
-            'config=<configfile.cfg> <robot=robotname>')    
+            'config=<configfile.cfg> robot=<robotname> [localization=<odom/fake>]')    
     # Check input parameters
     assert len(argv) > 1, usage   
     args = {}
@@ -392,6 +408,9 @@ def parse_arguments(argv):
         parts = s.split('=')
         args[parts[0]] = parts[1]
     
+    loc = args.get('localization','odom').lower()
+    args['localization'] = loc
+        
     return args
 
 #==============================================================================
@@ -399,6 +418,6 @@ def parse_arguments(argv):
 if __name__ == '__main__':
     
     args = parse_arguments(sys.argv)    
-    vehicle = diffdrive(args['config'], args['robot'])
+    vehicle = diffdrive(args['config'], args['robot'], args['localization'])
     vehicle.run()
 
