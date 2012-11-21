@@ -21,6 +21,7 @@ from usar_config_parser import usar_config_parser
 
 # Imports from this package
 from usar_client import usar_client
+from usarros.msg import ActivateGripper
 
 #==============================================================================
 
@@ -104,7 +105,8 @@ class diffdrive:
         self.tf_broadcaster = tf.TransformBroadcaster()
         self.tf_listener = tf.TransformListener()
         self.vel_sub = rospy.Subscriber('cmd_vel', Twist, self.cmd_vel_callback)
-        
+        self.grip_sub = rospy.Subscriber('gripper', ActivateGripper, self.gripper_callback)
+
         # Connect to USARSim       
         self.client = usar_client(usarpar['hostname'], usarpar['port'], 
                         self.parse_msg, self.create_init_msg(vehpar['type'], name))
@@ -377,6 +379,17 @@ class diffdrive:
         else:
             rospy.logwarn("Can't issue DRIVE command, robot parameters unknown!")
 
+
+#------------------------------------------------------------------------------
+
+    def gripper_callback(self, data):        
+        opcode = 'Open'        
+        if data.activate:
+            opcode = 'Close'
+            print('Closing!')
+
+        self.client.queue_msg('SET {{Type Gripper}}{{Opcode {0}}}\r\n'.format(opcode))
+        
 
 #------------------------------------------------------------------------------
 
