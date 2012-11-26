@@ -1,3 +1,7 @@
+# Gedit temporary files
+*~
+
+# Python
 *.py[co]
 
 # Packages
